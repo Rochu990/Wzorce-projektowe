@@ -1,103 +1,121 @@
-from __future__ import annotations
-
-from abc import ABC, abstractmethod
-from typing import Any
+import copy
 
 
-class Builder(ABC):
-    @property
-    @abstractmethod
-    def product(self) -> None:
-        pass
+class SelfReferencingEntity:
+    def __init__(self):
+        self.parent = None
 
-    @abstractmethod
-    def produce_part_a(self) -> None:
-        pass
-
-    @abstractmethod
-    def produce_part_b(self) -> None:
-        pass
-
-    @abstractmethod
-    def produce_part_c(self) -> None:
-        pass
+    def set_parent(self, parent):
+        self.parent = parent
 
 
-class ConcreteBuilder1(Builder):
-    def __init__(self) -> None:
-        self.reset()
+class SomeComponent:
 
-    def reset(self) -> None:
-        self._product = Product1()
+    def __init__(self, some_int, some_list_of_objects, some_circular_ref):
+        self.some_int = some_int
+        self.some_list_of_objects = some_list_of_objects
+        self.some_circular_ref = some_circular_ref
 
-    @property
-    def product(self) -> Product1:
-        product = self._product
-        self.reset()
-        return product
+    def __copy__(self):
 
-    def produce_part_a(self) -> None:
-        self._product.add("PartA1")
+        some_list_of_objects = copy.copy(self.some_list_of_objects)
+        some_circular_ref = copy.copy(self.some_circular_ref)
 
-    def produce_part_b(self) -> None:
-        self._product.add("PartB1")
+        new = self.__class__(self.some_int, some_list_of_objects, some_circular_ref)
+        new.__dict__.update(self.__dict__)
 
-    def produce_part_c(self) -> None:
-        self._product.add("PartC1")
+        return new
 
+    def __deepcopy__(self, memo=None):
 
-class Product1:
-    def __init__(self) -> None:
-        self.parts = []
+        if memo is None:
+            memo = {}
 
-    def add(self, part: Any) -> None:
-        self.parts.append(part)
+        some_list_of_objects = copy.deepcopy(self.some_list_of_objects, memo)
+        some_circular_ref = copy.deepcopy(self.some_circular_ref, memo)
 
-    def list_parts(self) -> None:
-        print(f"Product parts: {', '.join(self.parts)}", end="")
+        new = self.__class__(self.some_int, some_list_of_objects, some_circular_ref)
+        new.__dict__ = copy.deepcopy(self.__dict__, memo)
 
-
-class Director:
-
-    def __init__(self) -> None:
-        self._builder = None
-
-    @property
-    def builder(self) -> Builder:
-        return self._builder
-
-    @builder.setter
-    def builder(self, builder: Builder) -> None:
-        self._builder = builder
-
-    def build_minimal_viable_product(self) -> None:
-        self.builder.produce_part_a()
-
-    def build_full_featured_product(self) -> None:
-        self.builder.produce_part_a()
-        self.builder.produce_part_b()
-        self.builder.produce_part_c()
+        return new
 
 
 if __name__ == "__main__":
 
-    director = Director()
-    builder = ConcreteBuilder1()
-    director.builder = builder
+    list_of_objects = [1, {1, 2, 3}, [1, 2, 3]]
+    circular_ref = SelfReferencingEntity()
+    component = SomeComponent(23, list_of_objects, circular_ref)
+    circular_ref.set_parent(component)
 
-    print("Standard basic product: ")
-    director.build_minimal_viable_product()
-    builder.product.list_parts()
+    shallow_copied_component = copy.copy(component)
 
-    print("\n")
+    shallow_copied_component.some_list_of_objects.append("another object")
+    if component.some_list_of_objects[-1] == "another object":
+        print(
+            "Adding elements to `shallow_copied_component`'s "
+            "some_list_of_objects adds it to `component`'s "
+            "some_list_of_objects."
+        )
+    else:
+        print(
+            "Adding elements to `shallow_copied_component`'s "
+            "some_list_of_objects doesn't add it to `component`'s "
+            "some_list_of_objects."
+        )
 
-    print("Standard full featured product: ")
-    director.build_full_featured_product()
-    builder.product.list_parts()
+    component.some_list_of_objects[1].add(4)
+    if 4 in shallow_copied_component.some_list_of_objects[1]:
+        print(
+            "Changing objects in the `component`'s some_list_of_objects "
+            "changes that object in `shallow_copied_component`'s "
+            "some_list_of_objects."
+        )
+    else:
+        print(
+            "Changing objects in the `component`'s some_list_of_objects "
+            "doesn't change that object in `shallow_copied_component`'s "
+            "some_list_of_objects."
+        )
 
-    print("\n")
+    deep_copied_component = copy.deepcopy(component)
 
-    print("Custom product: ")
-    builder.produce_part_a()
-    builder.produce_part_b()
-    builder.product.list_parts()
+    deep_copied_component.some_list_of_objects.append("one more object")
+    if component.some_list_of_objects[-1] == "one more object":
+        print(
+            "Adding elements to `deep_copied_component`'s "
+            "some_list_of_objects adds it to `component`'s "
+            "some_list_of_objects."
+        )
+    else:
+        print(
+            "Adding elements to `deep_copied_component`'s "
+            "some_list_of_objects doesn't add it to `component`'s "
+            "some_list_of_objects."
+        )
+
+    component.some_list_of_objects[1].add(10)
+    if 10 in deep_copied_component.some_list_of_objects[1]:
+        print(
+            "Changing objects in the `component`'s some_list_of_objects "
+            "changes that object in `deep_copied_component`'s "
+            "some_list_of_objects."
+        )
+    else:
+        print(
+            "Changing objects in the `component`'s some_list_of_objects "
+            "doesn't change that object in `deep_copied_component`'s "
+            "some_list_of_objects."
+        )
+
+    print(
+        f"id(deep_copied_component.some_circular_ref.parent): "
+        f"{id(deep_copied_component.some_circular_ref.parent)}"
+    )
+    print(
+        f"id(deep_copied_component.some_circular_ref.parent.some_circular_ref.parent): "
+        f"{id(deep_copied_component.some_circular_ref.parent.some_circular_ref.parent)}"
+    )
+    print(
+        "^^ This shows that deepcopied objects contain same reference, they "
+        "are not cloned repeatedly."
+    )
